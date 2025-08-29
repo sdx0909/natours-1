@@ -132,6 +132,7 @@ exports.deleteTour = async (req, res) => {
 
 exports.getTourStats = async (req, res) => {
   try {
+    // STAGES IN MONGODB
     const stats = await Tour.aggregate([
       {
         $match: { ratingsAverage: { $gte: 4.5 } },
@@ -148,8 +149,12 @@ exports.getTourStats = async (req, res) => {
         },
       },
       {
-        $sort: {avgPrice: 1},
+        $sort: { avgPrice: 1 },
       },
+      // ADVANCED FILTERING
+      // {
+      //   $match: { _id: { $ne: 'EASY' } },
+      // },
     ]);
 
     res.status(200).json({
@@ -160,6 +165,68 @@ exports.getTourStats = async (req, res) => {
     res.status(400).json({
       success: 'fail',
       message: err,
+    });
+  }
+};
+
+exports.getMonthlyPlan = async (req, res) => {
+  try {
+    const year = req.params.year * 1;
+
+    const plan = await Tour.aggregate([
+      {
+        // seperating the array with individual records
+        $unwind: '$startDates',
+      },
+      {
+        // matching the dates within a respective year
+        $match: {
+          startDates: {
+            $gte: new Date(`${year}-01-01`),
+            $lte: new Date(`${year}-12-31`),
+          },
+        },
+      },
+      // grouping and showing how many tours within a month
+      {
+        $group: {
+          _id: { $month: '$startDates' },
+          numTourStarts: { $sum: 1 },
+          tours: { $push: '$name' },
+        },
+      },
+      // adding new field in data as month
+      {
+        $addFields: {
+          month: '$_id',
+        },
+      },
+      // removing the _id field
+      {
+        $project: {
+          _id: 0,
+        },
+      },
+      {
+        $sort: {
+          numTourStarts: -1, // in descending order
+          // month: 1,  in ascending order
+        },
+      },
+      {
+        $limit: 12,
+      },
+    ]);
+
+    res.status(200).json({
+      status: 'success',
+      results: plan.length,
+      data: plan,
+    });
+  } catch (err) {
+    res.status(400).json({
+      success: 'fail',
+      message: err.message,
     });
   }
 };
